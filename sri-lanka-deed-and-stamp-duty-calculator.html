@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="si">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OppuCalc — Sri Lanka deed & stamp duty calculator</title>
+<meta name="description" content="Sri Lanka deed stamp duty calculator — Sinhala, English, Tamil">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700&family=Noto+Sans+Tamil:wght@400;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   RATES — edit here if your Provincial Council changes them.
+   Duty is charged "for every Rs.100 or part thereof".
+   ============================================================ */
+</style>
+<script>
+const RATES = {
+  transfer: { firstLimit: 100000, firstRate: 3, restRate: 4 },
+  gift:     { firstLimit: 50000,  firstRate: 3, restRate: 2 },
+  penaltyMax: 100,   // % of shortfall, upper bound
+  roundTo: 100       // charged per Rs.100 or part thereof
+};
+</script>
+<style>
+:root{
+  --bg:#f6f3ee; --card:#ffffff; --ink:#1d2433; --muted:#5d6577; --line:#e4dfd6;
+  --accent:#9a3412; --accent-soft:#fdf0e7; --gold:#b7791f; --ok:#166534; --ok-soft:#e8f5ec;
+  --warn:#9f1239; --warn-soft:#fdecef; --field:#fbfaf7;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14161c; --card:#1d2029; --ink:#eceef3; --muted:#a2a8b6; --line:#2e3240;
+    --accent:#f0905a; --accent-soft:#3a2418; --gold:#e3b04b; --ok:#6fcf8f; --ok-soft:#173023;
+    --warn:#f28aa0; --warn-soft:#3a1a22; --field:#171a22;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14161c; --card:#1d2029; --ink:#eceef3; --muted:#a2a8b6; --line:#2e3240;
+  --accent:#f0905a; --accent-soft:#3a2418; --gold:#e3b04b; --ok:#6fcf8f; --ok-soft:#173023;
+  --warn:#f28aa0; --warn-soft:#3a1a22; --field:#171a22;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"Inter","Noto Sans Sinhala","Noto Sans Tamil",system-ui,sans-serif;
+  line-height:1.55; -webkit-font-smoothing:antialiased;
+}
+body.lang-si{font-family:"Noto Sans Sinhala","Inter",system-ui,sans-serif}
+body.lang-ta{font-family:"Noto Sans Tamil","Inter",system-ui,sans-serif}
+.wrap{max-width:860px;margin:0 auto;padding:24px 16px 48px}
+header{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;justify-content:space-between;margin-bottom:24px}
+.brand h1{margin:0;font-size:clamp(1.4rem,3.5vw,2rem);line-height:1.25;letter-spacing:-.01em}
+.brand p{margin:6px 0 0;color:var(--muted);max-width:52ch}
+.langs{display:flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px;flex-shrink:0}
+.langs button{
+  border:0;background:transparent;color:var(--muted);font:inherit;font-size:.9rem;font-weight:600;
+  padding:7px 14px;border-radius:999px;cursor:pointer
+}
+.langs button[aria-pressed="true"]{background:var(--accent);color:#fff}
+:root[data-theme="dark"] .langs button[aria-pressed="true"]{color:#1a1a1a}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .langs button[aria-pressed="true"]{color:#1a1a1a}}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;margin-bottom:18px}
+.card h2{margin:0 0 14px;font-size:1.08rem}
+label.lbl{display:block;font-weight:600;font-size:.95rem;margin-bottom:8px}
+
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
+.seg button{
+  font:inherit;text-align:left;padding:14px;border-radius:12px;cursor:pointer;
+  border:1.5px solid var(--line);background:var(--field);color:var(--ink)
+}
+.seg button strong{display:block;font-size:.98rem}
+.seg button span{display:block;color:var(--muted);font-size:.82rem;margin-top:2px}
+.seg button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+
+.money{position:relative}
+.money .pre{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-weight:600}
+.money input{
+  width:100%;font:inherit;font-size:1.35rem;font-weight:700;padding:14px 14px 14px 52px;
+  border-radius:12px;border:1.5px solid var(--line);background:var(--field);color:var(--ink);outline:none
+}
+.money input:focus{border-color:var(--accent)}
+.hint{color:var(--muted);font-size:.85rem;margin:8px 0 0}
+.lakh{color:var(--gold);font-weight:600;font-size:.9rem;margin-top:6px;min-height:1.3em}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chips button{
+  font:inherit;font-size:.85rem;border:1px solid var(--line);background:var(--card);color:var(--ink);
+  padding:6px 12px;border-radius:999px;cursor:pointer
+}
+.chips button:hover{border-color:var(--accent)}
+
+.result{background:var(--ink);color:var(--bg);border-radius:16px;padding:22px;margin-bottom:18px}
+.result .k{font-size:.9rem;opacity:.75}
+.result .big{font-size:clamp(1.9rem,6vw,2.7rem);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin:4px 0 10px;word-break:break-word}
+.result .meta{display:flex;flex-wrap:wrap;gap:8px 22px;font-size:.92rem;opacity:.9}
+
+table{width:100%;border-collapse:collapse;font-size:.95rem}
+th,td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:right}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:600;font-size:.85rem}
+tfoot td{font-weight:700;border-bottom:0}
+
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cmp div{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--field)}
+.cmp div.on{border-color:var(--accent)}
+.cmp small{color:var(--muted);display:block}
+.cmp b{font-size:1.15rem}
+.save{margin:12px 0 0;padding:10px 12px;border-radius:10px;background:var(--ok-soft);color:var(--ok);font-weight:600;font-size:.92rem}
+
+details summary{cursor:pointer;font-weight:700;font-size:1.05rem;list-style:none}
+details summary::-webkit-details-marker{display:none}
+details summary::before{content:"▸ ";color:var(--accent)}
+details[open] summary::before{content:"▾ "}
+.risk{margin-top:14px;border-radius:12px;padding:14px;background:var(--warn-soft);color:var(--warn)}
+.risk.okk{background:var(--ok-soft);color:var(--ok)}
+.risk .row{display:flex;justify-content:space-between;gap:10px;padding:4px 0}
+.risk .row.tot{border-top:1px solid currentColor;margin-top:6px;padding-top:8px;font-weight:700}
+
+.sum{border:1.5px solid var(--accent)}
+.srow{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.srow b{text-align:right;white-space:nowrap}
+.srow.tot{border-bottom:0;padding-top:14px;font-size:1.15rem}
+.srow.tot b{color:var(--accent);font-size:1.35rem}
+.seg button[data-fee]{text-align:center}
+ul.tips{margin:0;padding-left:20px}
+ul.tips li{margin-bottom:6px}
+.note{font-size:.85rem;color:var(--muted)}
+footer{font-size:.82rem;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;margin-top:8px}
+footer button{font:inherit;font-size:.82rem;background:none;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:4px 10px;cursor:pointer;margin-top:10px}
+
+@media (max-width:560px){
+  .seg,.cmp{grid-template-columns:1fr}
+  .card,.result{padding:18px}
+  th,td{padding:9px 4px;font-size:.88rem}
+}
+@media print{
+  .langs,.chips,footer button{display:none}
+  .result{background:#fff;color:#000;border:1px solid #000}
+}
+</style>
+</head>
+<body class="lang-si">
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1 data-t="title"></h1>
+      <p data-t="subtitle"></p>
+    </div>
+    <div class="langs" role="group" aria-label="Language">
+      <button data-lang="si">සිංහල</button>
+      <button data-lang="en">English</button>
+      <button data-lang="ta">தமிழ்</button>
+    </div>
+  </header>
+
+  <section class="card">
+    <label class="lbl" data-t="deedType"></label>
+    <div class="seg" role="group">
+      <button data-type="transfer"><strong data-t="transfer"></strong><span data-t="transferRate"></span></button>
+      <button data-type="gift"><strong data-t="gift"></strong><span data-t="giftRate"></span></button>
+    </div>
+
+    <label class="lbl" for="val" data-t="value"></label>
+    <div class="money">
+      <span class="pre" data-t="rs"></span>
+      <input id="val" inputmode="numeric" autocomplete="off" placeholder="5,000,000">
+    </div>
+    <div class="lakh" id="lakh"></div>
+    <div class="chips" id="chips"></div>
+    <p class="hint" data-t="valueHint"></p>
+  </section>
+
+  <section class="result" aria-live="polite">
+    <div class="k" data-t="total"></div>
+    <div class="big" id="total">—</div>
+    <div class="meta">
+      <span><span data-t="effective"></span>: <b id="eff">—</b></span>
+      <span><span data-t="deedTypeShort"></span>: <b id="typeName">—</b></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 data-t="feeTitle"></h2>
+    <div class="seg" role="group" style="margin-bottom:16px">
+      <button data-fee="pct"><strong data-t="feePct"></strong></button>
+      <button data-fee="fixed"><strong data-t="feeFixed"></strong></button>
+    </div>
+    <label class="lbl" for="fee" id="feeLbl"></label>
+    <div class="money">
+      <span class="pre" id="feePre"></span>
+      <input id="fee" inputmode="decimal" autocomplete="off">
+    </div>
+    <div class="lakh" id="feeCalc"></div>
+    <p class="hint" data-t="feeHint"></p>
+  </section>
+
+  <section class="card sum">
+    <h2 data-t="grandTitle"></h2>
+    <div class="srow"><span data-t="landValue"></span><b id="sLand">—</b></div>
+    <div class="srow"><span data-t="stampDuty"></span><b id="sDuty">—</b></div>
+    <div class="srow"><span data-t="lawyerFee"></span><b id="sFee">—</b></div>
+    <div class="srow tot"><span data-t="grandTotal"></span><b id="sTotal">—</b></div>
+    <p class="note" id="sExtra"></p>
+  </section>
+
+  <section class="card">
+    <h2 data-t="breakdown"></h2>
+    <table>
+      <thead><tr><th data-t="portion"></th><th data-t="rate"></th><th data-t="duty"></th></tr></thead>
+      <tbody id="rows"></tbody>
+      <tfoot><tr><td data-t="totalShort"></td><td></td><td id="footTotal">—</td></tr></tfoot>
+    </table>
+    <p class="note" data-t="roundNote"></p>
+  </section>
+
+  <section class="card">
+    <h2 data-t="compare"></h2>
+    <div class="cmp">
+      <div id="cT"><small data-t="transfer"></small><b id="cTv">—</b></div>
+      <div id="cG"><small data-t="gift"></small><b id="cGv">—</b></div>
+    </div>
+    <div class="save" id="save" hidden></div>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary data-t="underTitle"></summary>
+      <p class="hint" data-t="underIntro"></p>
+      <label class="lbl" for="decl" style="margin-top:12px" data-t="declared"></label>
+      <div class="money">
+        <span class="pre" data-t="rs"></span>
+        <input id="decl" inputmode="numeric" autocomplete="off" placeholder="2,000,000">
+      </div>
+      <div class="risk" id="risk" hidden></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2 data-t="tipsTitle"></h2>
+    <ul class="tips" id="tips"></ul>
+  </section>
+
+  <footer>
+    <div data-t="disclaimer"></div>
+    <button onclick="window.print()" data-t="print"></button>
+  </footer>
+</div>
+
+<script>
+const T = {
+  en:{
+    title:"Deed Stamp Duty Calculator",
+    subtitle:"Work out the stamp duty payable to the Provincial Council when registering a deed in Sri Lanka.",
+    deedType:"Deed type", deedTypeShort:"Deed",
+    transfer:"Deed of Transfer (Sale)", gift:"Deed of Gift",
+    transferRate:"3% on first Rs. 100,000 · 4% on balance",
+    giftRate:"3% on first Rs. 50,000 · 2% on balance",
+    value:"Property value", rs:"Rs.",
+    valueHint:"Enter the market value. The Provincial Department of Revenue charges duty on market value, not only the price written on the deed.",
+    lakh:n=>`≈ ${n} lakhs`,
+    total:"Stamp duty payable", totalShort:"Total", effective:"Effective rate",
+    breakdown:"Breakdown", portion:"Portion", rate:"Rate", duty:"Duty",
+    first:x=>`First Rs. ${x}`, balance:x=>`Balance Rs. ${x}`, whole:x=>`Rs. ${x}`,
+    roundNote:"Duty is charged for every Rs. 100 or part of it, so the balance is rounded up to the next Rs. 100.",
+    compare:"Transfer vs gift for this value",
+    saving:x=>`A deed of gift costs Rs. ${x} less in stamp duty.`,
+    underTitle:"Under-valuation risk check",
+    underIntro:"If the value written on the deed is below the assessed market value, the unpaid duty is recovered plus a penalty of up to 100% of the shortfall. Enter the value you plan to write on the deed.",
+    declared:"Value written on the deed",
+    paid:"Duty paid on deed value", shortfall:"Unpaid duty (shortfall)", penalty:"Penalty (up to 100%)",
+    exposure:"Possible amount demanded later",
+    noShort:"The deed value is at or above the market value — no shortfall.",
+    tipsTitle:"Before you write the deed",
+    tips:["Ask the Divisional Secretariat or Provincial Revenue office for the assessed value per perch in the area.",
+          "Agree the figure with your notary and deposit the duty to the Provincial Department of Revenue account.",
+          "Attach the payment receipt to the deed."],
+    disclaimer:"For general awareness only — not legal or financial advice. Rates are set by each Provincial Council and may change; confirm with a qualified notary or attorney before acting.",
+    print:"Print",
+    feeTitle:"Lawyer / notary fee", feePct:"Percentage", feeFixed:"Fixed amount",
+    feePctLbl:"Fee (% of property value)", feeFixedLbl:"Fee amount",
+    feeHint:"Agree the fee with your lawyer or notary before the deed is written.",
+    grandTitle:"Total cost", landValue:"Land / property value", stampDuty:"Stamp duty",
+    lawyerFee:"Lawyer's fee", grandTotal:"Total amount needed",
+    extra:x=>`Costs on top of the land value: Rs. ${x}`
+  },
+  si:{
+    title:"ඔප්පු මුද්දර ගාස්තු ගණකය",
+    subtitle:"ඔප්පුවක් ලියාපදිංචි කිරීමේදී පළාත් සභාවට ගෙවිය යුතු මුද්දර ගාස්තුව ගණනය කරගන්න.",
+    deedType:"ඔප්පු වර්ගය", deedTypeShort:"ඔප්පුව",
+    transfer:"සින්නක්කර විකුණුම් ඔප්පුව", gift:"තෑගි ඔප්පුව",
+    transferRate:"පළමු රු. 100,000ට 3% · ඉතිරියට 4%",
+    giftRate:"පළමු රු. 50,000ට 3% · ඉතිරියට 2%",
+    value:"දේපළේ වටිනාකම", rs:"රු.",
+    valueHint:"වෙළඳපොළ වටිනාකම ඇතුළත් කරන්න. පළාත් ආදායම් දෙපාර්තමේන්තුව ගාස්තුව අය කරන්නේ ඔප්පුවේ ලියූ මිලට පමණක් නොව වෙළඳපොළ වටිනාකමටයි.",
+    lakh:n=>`≈ ලක්ෂ ${n}`,
+    total:"ගෙවිය යුතු මුද්දර ගාස්තුව", totalShort:"එකතුව", effective:"සඵල අනුපාතය",
+    breakdown:"ගණනය කිරීම", portion:"කොටස", rate:"අනුපාතය", duty:"ගාස්තුව",
+    first:x=>`පළමු රු. ${x}`, balance:x=>`ඉතිරි රු. ${x}`, whole:x=>`රු. ${x}`,
+    roundNote:"ගාස්තුව අය කරන්නේ සෑම රු. 100කට හෝ එහි කොටසකටයි; එබැවින් ඉතිරි මුදල ඊළඟ රු. 100ට වටයනු ලැබේ.",
+    compare:"මෙම වටිනාකමට විකුණුම් සහ තෑගි ඔප්පු සැසඳීම",
+    saving:x=>`තෑගි ඔප්පුවකින් මුද්දර ගාස්තුවෙන් රු. ${x}ක් ඉතිරි වේ.`,
+    underTitle:"අඩු තක්සේරු අවදානම් පරීක්ෂාව",
+    underIntro:"ඔප්පුවේ ලියූ වටිනාකම තක්සේරු වෙළඳපොළ වටිනාකමට වඩා අඩු නම්, හිඟ ගාස්තුවට අමතරව එම හිඟයෙන් 100% දක්වා දඩයක් අය කෙරේ. ඔප්පුවේ ලිවීමට අදහස් කරන වටිනාකම ඇතුළත් කරන්න.",
+    declared:"ඔප්පුවේ ලියන වටිනාකම",
+    paid:"ඔප්පු වටිනාකමට ගෙවූ ගාස්තුව", shortfall:"හිඟ මුද්දර ගාස්තුව", penalty:"දඩය (100% දක්වා)",
+    exposure:"පසුව ඉල්ලා සිටිය හැකි මුදල",
+    noShort:"ඔප්පුවේ වටිනාකම වෙළඳපොළ වටිනාකමට සමාන හෝ වැඩි — හිඟයක් නැත.",
+    tipsTitle:"ඔප්පුව ලියන්න පෙර",
+    tips:["ප්‍රාදේශීය ලේකම් කාර්යාලයෙන් හෝ පළාත් ආදායම් කාර්යාලයෙන් ප්‍රදේශයේ පර්චසයක තක්සේරු වටිනාකම දැනගන්න.",
+          "නොතාරිස්වරයා සමඟ කතා කර මුද්දර ගාස්තුව පළාත් ආදායම් දෙපාර්තමේන්තුවේ ගිණුමට බැර කරන්න.",
+          "ගෙවීම් රිසිට්පත ඔප්පුවට අමුණන්න."],
+    disclaimer:"සාමාන්‍ය දැනුවත් කිරීම සඳහා පමණි — නීතිමය හෝ මූල්‍ය උපදෙසක් නොවේ. අනුපාත එක් එක් පළාත් සභාව විසින් තීරණය කරන අතර වෙනස් විය හැක; තීරණයකට පෙර සුදුසුකම් ලත් නොතාරිස්වරයෙකු හෝ නීතිඥයෙකුගෙන් තහවුරු කරගන්න.",
+    print:"මුද්‍රණය",
+    feeTitle:"නීතිඥ / නොතාරිස් ගාස්තුව", feePct:"ප්‍රතිශතයක් ලෙස", feeFixed:"ස්ථාවර මුදලක් ලෙස",
+    feePctLbl:"ගාස්තුව (දේපළ වටිනාකමෙන් %)", feeFixedLbl:"ගාස්තු මුදල",
+    feeHint:"ඔප්පුව ලිවීමට පෙර ගාස්තුව ඔබේ නීතිඥයා හෝ නොතාරිස්වරයා සමඟ එකඟ කරගන්න.",
+    grandTitle:"මුළු වියදම", landValue:"ඉඩමේ / දේපළේ වටිනාකම", stampDuty:"මුද්දර ගාස්තුව",
+    lawyerFee:"නීතිඥ ගාස්තුව", grandTotal:"අවශ්‍ය මුළු මුදල",
+    extra:x=>`ඉඩමේ වටිනාකමට අමතරව යන වියදම: රු. ${x}`
+  },
+  ta:{
+    title:"உறுதி முத்திரைத் தீர்வைக் கணிப்பான்",
+    subtitle:"இலங்கையில் உறுதியொன்றைப் பதிவு செய்யும்போது மாகாண சபைக்குச் செலுத்த வேண்டிய முத்திரைத் தீர்வையைக் கணக்கிடுங்கள்.",
+    deedType:"உறுதி வகை", deedTypeShort:"உறுதி",
+    transfer:"விற்பனை (மாற்றுகை) உறுதி", gift:"நன்கொடை உறுதி",
+    transferRate:"முதல் ரூ. 100,000க்கு 3% · மீதிக்கு 4%",
+    giftRate:"முதல் ரூ. 50,000க்கு 3% · மீதிக்கு 2%",
+    value:"சொத்தின் பெறுமதி", rs:"ரூ.",
+    valueHint:"சந்தைப் பெறுமதியை உள்ளிடுங்கள். மாகாண இறைவரித் திணைக்களம் உறுதியில் எழுதிய விலையை மட்டுமன்றி சந்தைப் பெறுமதியின் அடிப்படையில் தீர்வையை அறவிடுகிறது.",
+    lakh:n=>`≈ ${n} இலட்சம்`,
+    total:"செலுத்த வேண்டிய முத்திரைத் தீர்வை", totalShort:"மொத்தம்", effective:"நடைமுறை வீதம்",
+    breakdown:"கணிப்பு விபரம்", portion:"பகுதி", rate:"வீதம்", duty:"தீர்வை",
+    first:x=>`முதல் ரூ. ${x}`, balance:x=>`மீதி ரூ. ${x}`, whole:x=>`ரூ. ${x}`,
+    roundNote:"ஒவ்வொரு ரூ. 100 அல்லது அதன் பகுதிக்கும் தீர்வை அறவிடப்படுவதால், மீதித் தொகை அடுத்த ரூ. 100க்கு முழுமையாக்கப்படும்.",
+    compare:"இப்பெறுமதிக்கு விற்பனை – நன்கொடை உறுதி ஒப்பீடு",
+    saving:x=>`நன்கொடை உறுதியில் முத்திரைத் தீர்வை ரூ. ${x} குறைவு.`,
+    underTitle:"குறைமதிப்பீட்டு அபாயச் சோதனை",
+    underIntro:"உறுதியில் எழுதிய பெறுமதி மதிப்பிடப்பட்ட சந்தைப் பெறுமதியை விடக் குறைவாக இருந்தால், செலுத்தப்படாத தீர்வையுடன் அக்குறைவின் 100% வரை தண்டப்பணமும் அறவிடப்படும். உறுதியில் எழுத எண்ணும் பெறுமதியை உள்ளிடுங்கள்.",
+    declared:"உறுதியில் எழுதப்படும் பெறுமதி",
+    paid:"உறுதிப் பெறுமதிக்குச் செலுத்திய தீர்வை", shortfall:"செலுத்தப்படாத தீர்வை (குறைவு)", penalty:"தண்டப்பணம் (100% வரை)",
+    exposure:"பின்னர் கோரப்படக்கூடிய தொகை",
+    noShort:"உறுதிப் பெறுமதி சந்தைப் பெறுமதிக்குச் சமம் அல்லது அதிகம் — குறைவு இல்லை.",
+    tipsTitle:"உறுதி எழுதுவதற்கு முன்",
+    tips:["பிரதேச செயலகம் அல்லது மாகாண இறைவரி அலுவலகத்தில் அப்பகுதியின் ஒரு பேர்ச்சுக்கான மதிப்பீட்டுப் பெறுமதியை அறிந்துகொள்ளுங்கள்.",
+          "உங்கள் நொத்தாரிசுடன் கலந்துரையாடி, தீர்வையை மாகாண இறைவரித் திணைக்களக் கணக்கில் வைப்புச் செய்யுங்கள்.",
+          "கட்டணப் பற்றுச்சீட்டை உறுதியுடன் இணையுங்கள்."],
+    disclaimer:"பொது விழிப்புணர்வுக்கு மட்டுமே — சட்ட அல்லது நிதி ஆலோசனை அல்ல. வீதங்கள் ஒவ்வொரு மாகாண சபையாலும் தீர்மானிக்கப்படுவதுடன் மாறக்கூடும்; செயற்படுவதற்கு முன் தகுதியான நொத்தாரிசு அல்லது சட்டத்தரணியிடம் உறுதிப்படுத்துங்கள்.",
+    print:"அச்சிடு",
+    feeTitle:"சட்டத்தரணி / நொத்தாரிசு கட்டணம்", feePct:"சதவீதமாக", feeFixed:"நிலையான தொகையாக",
+    feePctLbl:"கட்டணம் (சொத்துப் பெறுமதியின் %)", feeFixedLbl:"கட்டணத் தொகை",
+    feeHint:"உறுதி எழுதப்படுவதற்கு முன் கட்டணத்தை உங்கள் சட்டத்தரணி அல்லது நொத்தாரிசுடன் ஒப்புக்கொள்ளுங்கள்.",
+    grandTitle:"மொத்தச் செலவு", landValue:"காணி / சொத்தின் பெறுமதி", stampDuty:"முத்திரைத் தீர்வை",
+    lawyerFee:"சட்டத்தரணி கட்டணம்", grandTotal:"தேவையான மொத்தத் தொகை",
+    extra:x=>`காணிப் பெறுமதிக்கு மேலதிகச் செலவு: ரூ. ${x}`
+  }
+};
+
+const PRESETS = [1000000, 2500000, 5000000, 10000000, 25000000];
+const state = { lang:"si", type:"transfer", feeMode:"pct" };
+try { const s = JSON.parse(localStorage.getItem("deedcalc")||"{}"); Object.assign(state, s); } catch(e){}
+
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString("en-LK");
+const parse = s => { const n = parseFloat(String(s).replace(/[^\d.]/g,"")); return isFinite(n) ? n : 0; };
+
+function duty(value, type){
+  const r = RATES[type], step = RATES.roundTo;
+  if (value <= 0) return { total:0, rows:[] };
+  const units = v => Math.ceil(v/step) * step;
+  if (value <= r.firstLimit){
+    const d = units(value) * r.firstRate / 100;
+    return { total:d, rows:[{ k:"whole", amt:value, rate:r.firstRate, d }] };
+  }
+  const d1 = r.firstLimit * r.firstRate / 100;
+  const bal = value - r.firstLimit;
+  const d2 = units(bal) * r.restRate / 100;
+  return { total:d1+d2, rows:[
+    { k:"first", amt:r.firstLimit, rate:r.firstRate, d:d1 },
+    { k:"balance", amt:bal, rate:r.restRate, d:d2 }
+  ]};
+}
+
+function save(){ try { localStorage.setItem("deedcalc", JSON.stringify({lang:state.lang,type:state.type,feeMode:state.feeMode})); } catch(e){} }
+
+function applyLang(){
+  const L = T[state.lang];
+  document.documentElement.lang = state.lang;
+  document.body.className = "lang-" + state.lang;
+  document.title = L.title;
+  document.querySelectorAll("[data-t]").forEach(el => { const v = L[el.dataset.t]; if (typeof v === "string") el.textContent = v; });
+  document.querySelectorAll("[data-lang]").forEach(b => b.setAttribute("aria-pressed", b.dataset.lang === state.lang));
+  $("tips").innerHTML = L.tips.map(t => `<li>${t}</li>`).join("");
+  $("chips").innerHTML = PRESETS.map(p => `<button data-v="${p}">${L.lakh(p/100000).replace("≈ ","")}</button>`).join("");
+  $("chips").querySelectorAll("button").forEach(b => b.onclick = () => { $("val").value = fmt(+b.dataset.v); calc(); });
+  calc();
+}
+
+function calc(){
+  const L = T[state.lang];
+  document.querySelectorAll("[data-type]").forEach(b => b.setAttribute("aria-pressed", b.dataset.type === state.type));
+  const v = parse($("val").value);
+  $("lakh").textContent = v >= 100000 ? L.lakh((v/100000).toLocaleString("en-LK",{maximumFractionDigits:2})) : "";
+
+  const res = duty(v, state.type);
+  $("total").textContent = v ? `${L.rs} ${fmt(res.total)}` : "—";
+  $("footTotal").textContent = v ? `${L.rs} ${fmt(res.total)}` : "—";
+  $("eff").textContent = v ? (res.total / v * 100).toFixed(2) + "%" : "—";
+  $("typeName").textContent = L[state.type];
+  $("rows").innerHTML = res.rows.map(r =>
+    `<tr><td>${L[r.k](fmt(r.amt))}</td><td>${r.rate}%</td><td>${L.rs} ${fmt(r.d)}</td></tr>`).join("")
+    || `<tr><td colspan="3" style="text-align:center;color:var(--muted)">—</td></tr>`;
+
+  const t = duty(v,"transfer").total, g = duty(v,"gift").total;
+  $("cTv").textContent = v ? `${L.rs} ${fmt(t)}` : "—";
+  $("cGv").textContent = v ? `${L.rs} ${fmt(g)}` : "—";
+  $("cT").classList.toggle("on", state.type==="transfer");
+  $("cG").classList.toggle("on", state.type==="gift");
+  $("save").hidden = !(v && t > g);
+  $("save").textContent = L.saving(fmt(t-g));
+
+  // Lawyer fee + grand total
+  document.querySelectorAll("[data-fee]").forEach(b => b.setAttribute("aria-pressed", b.dataset.fee === state.feeMode));
+  const pct = state.feeMode === "pct";
+  $("feeLbl").textContent = pct ? L.feePctLbl : L.feeFixedLbl;
+  $("feePre").textContent = pct ? "%" : L.rs;
+  $("fee").placeholder = pct ? "1.5" : "75,000";
+  const fRaw = parse($("fee").value);
+  const fee = pct ? v * Math.min(fRaw, 100) / 100 : fRaw;
+  $("feeCalc").textContent = pct && fee ? `= ${L.rs} ${fmt(fee)}` : "";
+  $("sLand").textContent = v ? `${L.rs} ${fmt(v)}` : "—";
+  $("sDuty").textContent = v ? `${L.rs} ${fmt(res.total)}` : "—";
+  $("sFee").textContent = `${L.rs} ${fmt(fee)}`;
+  $("sTotal").textContent = (v || fee) ? `${L.rs} ${fmt(v + res.total + fee)}` : "—";
+  $("sExtra").textContent = v ? L.extra(fmt(res.total + fee)) : "";
+
+  const d = parse($("decl").value), risk = $("risk");
+  if (!v || !d){ risk.hidden = true; return; }
+  risk.hidden = false;
+  if (d >= v){ risk.className = "risk okk"; risk.textContent = L.noShort; return; }
+  const paid = duty(d, state.type).total, short = res.total - paid, pen = short * RATES.penaltyMax / 100;
+  risk.className = "risk";
+  risk.innerHTML =
+    `<div class="row"><span>${L.total}</span><span>${L.rs} ${fmt(res.total)}</span></div>
+     <div class="row"><span>${L.paid}</span><span>− ${L.rs} ${fmt(paid)}</span></div>
+     <div class="row"><span>${L.shortfall}</span><span>${L.rs} ${fmt(short)}</span></div>
+     <div class="row"><span>${L.penalty}</span><span>+ ${L.rs} ${fmt(pen)}</span></div>
+     <div class="row tot"><span>${L.exposure}</span><span>${L.rs} ${fmt(short+pen)}</span></div>`;
+}
+
+function liveFormat(el){
+  el.addEventListener("input", () => {
+    if (el.id === "fee" && state.feeMode === "pct") return;
+    const pos = el.value.length - el.selectionStart;
+    const digits = el.value.replace(/[^\d]/g,"");
+    el.value = digits ? fmt(+digits) : "";
+    const p = Math.max(0, el.value.length - pos);
+    try { el.setSelectionRange(p,p); } catch(e){}
+    calc();
+  });
+}
+
+document.querySelectorAll("[data-lang]").forEach(b => b.onclick = () => { state.lang = b.dataset.lang; save(); applyLang(); });
+document.querySelectorAll("[data-type]").forEach(b => b.onclick = () => { state.type = b.dataset.type; save(); calc(); });
+liveFormat($("val")); liveFormat($("decl"));
+$("fee").addEventListener("input", () => {
+  const el = $("fee");
+  if (state.feeMode === "pct"){
+    let s = el.value.replace(/[^\d.]/g,"").replace(/(\..*)\./g,"$1");
+    if (parseFloat(s) > 100) s = "100";
+    el.value = s; calc();
+  }
+});
+liveFormat($("fee"));
+document.querySelectorAll("[data-fee]").forEach(b => b.onclick = () => {
+  if (state.feeMode !== b.dataset.fee){ state.feeMode = b.dataset.fee; $("fee").value = ""; save(); calc(); }
+});
+$("val").value = fmt(5000000);
+applyLang();
+</script>
+</body>
+</html>
